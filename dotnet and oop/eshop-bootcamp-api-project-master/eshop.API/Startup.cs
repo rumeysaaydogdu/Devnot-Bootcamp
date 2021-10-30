@@ -15,10 +15,12 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace eshop.API
@@ -36,17 +38,32 @@ namespace eshop.API
         public void ConfigureServices(IServiceCollection services)
         {
 
-            services.AddControllers();
+            services.AddControllers()
+                    .AddNewtonsoftJson(config =>
+                    {
+                        config.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore;
+                    });
+
+            var isProduction = Configuration.GetSection("IsProduction").Get<bool>();
             services.AddScoped<IProductService, ProductService>();
-            services.AddScoped<IProductRepository, FakeProductRepository>();
+            if (isProduction)
+            {
+                services.AddScoped<IProductRepository, EFProductRepository>();
+            }
+            else
+            {
+                services.AddScoped<IProductRepository, FakeProductRepository>();
+            }
+           
+         
             services.AddAutoMapper(typeof(MappingProfile));
 
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "eshop.API", Version = "v1" });
             });
-            //services.AddAuthentication("Basic")
-            //        .AddScheme<BasicAuthenticationOption,BasicAuthenticationHandler>("Basic",null);
+            services.AddAuthentication("Basic")
+                    .AddScheme<BasicAuthenticationOption,BasicAuthenticationHandler>("Basic",null);
 
             //JWT Bearer için aşağıdaki kodları kullandık, Basic'i iptal ettik.
 
@@ -56,19 +73,19 @@ namespace eshop.API
             var securityKey = bearer["SecurityKey"];
 
             //JWT'nin nasıl üretileceğini ve onaylanacağı kurallarını yazdık
-            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                    .AddJwtBearer(option =>
-                    {
-                        option.TokenValidationParameters = new TokenValidationParameters
-                        {                           
-                            ValidateIssuer = true,
-                            ValidateAudience = true,
-                            ValidateIssuerSigningKey = true,
-                            ValidIssuer = issuer,
-                            ValidAudience = audience,
-                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(securityKey))
-                        };
-                    });
+            //services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            //        .AddJwtBearer(option =>
+            //        {
+            //            option.TokenValidationParameters = new TokenValidationParameters
+            //            {                           
+            //                ValidateIssuer = true,
+            //                ValidateAudience = true,
+            //                ValidateIssuerSigningKey = true,
+            //                ValidIssuer = issuer,
+            //                ValidAudience = audience,
+            //                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(securityKey))
+            //            };
+            //        });
 
             services.AddCors(option => option.AddPolicy("Allow", policyBuilder =>
             {
@@ -81,6 +98,7 @@ namespace eshop.API
 
             var connectionString = Configuration.GetConnectionString("db");
             services.AddDbContext<EshopDbContext>(option => option.UseSqlServer(connectionString));
+            
 
 
         }
@@ -98,7 +116,6 @@ namespace eshop.API
             app.UseHttpsRedirection();
 
             app.UseRouting();
-
             app.UseCors("Allow");
             app.UseAuthentication();
             app.UseAuthorization();
